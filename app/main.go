@@ -1,3 +1,4 @@
+// https://golangbot.com/connect-create-db-mysql/
 package main
 
 import (
@@ -13,8 +14,8 @@ import (
 const (
 	username = "root"
 	password = "password"
-	hostname = "localhost:3306"
-	dbname   = "test-db"
+	hostname = "127.0.0.1:3306"
+	dbname   = "ecommerce"
 )
 
 func dsn(dbName string) string {
@@ -42,4 +43,25 @@ func main() {
 		return
 	}
 	log.Printf("rows affected %d\n", no)
+
+	db.Close()
+	db, err = sql.Open("mysql", dsn(dbname))
+	if err != nil {
+		log.Printf("Error %s when opening DB", err)
+		return
+	}
+	defer db.Close()
+
+	db.SetMaxOpenConns(20)
+	db.SetMaxIdleConns(20)
+	db.SetConnMaxLifetime(time.Minute * 5)
+
+	ctx, cancelfunc = context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelfunc()
+	err = db.PingContext(ctx)
+	if err != nil {
+		log.Printf("Errors %s pinging DB", err)
+		return
+	}
+	log.Printf("Connected to DB %s successfully\n", dbname)
 }
