@@ -13,7 +13,7 @@ import (
 const (
 	username = "root"
 	password = "password"
-	hostname = "127.0.0.1:3306"
+	hostname = "localhost:3306"
 	dbname   = "test-db"
 )
 
