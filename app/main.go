@@ -1,67 +1,86 @@
-// https://golangbot.com/connect-create-db-mysql/
 package main
 
 import (
-	"context"
-	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
-	"time"
+	"net/http"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/gorilla/mux"
 )
 
-const (
-	username = "root"
-	password = "password"
-	hostname = "127.0.0.1:3306"
-	dbname   = "ecommerce"
-)
+// Article - Our struct for all articles
+type Article struct {
+	Id      string `json:"Id"`
+	Title   string `json:"Title"`
+	Desc    string `json:"desc"`
+	Content string `json:"content"`
+}
 
-func dsn(dbName string) string {
-	return fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, hostname, dbName)
+var Articles []Article
+
+func homePage(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Welcome to the HomePage!")
+	fmt.Println("Endpoint Hit: homePage")
+}
+
+func returnAllArticles(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Endpoint Hit: returnAllArticles")
+	json.NewEncoder(w).Encode(Articles)
+}
+
+func returnSingleArticle(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	key := vars["id"]
+
+	for _, article := range Articles {
+		if article.Id == key {
+			json.NewEncoder(w).Encode(article)
+		}
+	}
+}
+
+func createNewArticle(w http.ResponseWriter, r *http.Request) {
+	// get the body of our POST request
+	// unmarshal this into a new Article struct
+	// append this to our Articles array.
+	reqBody, _ := ioutil.ReadAll(r.Body)
+	var article Article
+	json.Unmarshal(reqBody, &article)
+	// update our global Articles array to include
+	// our new Article
+	Articles = append(Articles, article)
+
+	json.NewEncoder(w).Encode(article)
+}
+
+func deleteArticle(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	for index, article := range Articles {
+		if article.Id == id {
+			Articles = append(Articles[:index], Articles[index+1:]...)
+		}
+	}
+
+}
+
+func handleRequests() {
+	myRouter := mux.NewRouter().StrictSlash(true)
+	myRouter.HandleFunc("/", homePage)
+	myRouter.HandleFunc("/articles", returnAllArticles)
+	myRouter.HandleFunc("/article", createNewArticle).Methods("POST")
+	myRouter.HandleFunc("/article/{id}", deleteArticle).Methods("DELETE")
+	myRouter.HandleFunc("/article/{id}", returnSingleArticle)
+	log.Fatal(http.ListenAndServe(":10000", myRouter))
 }
 
 func main() {
-	db, err := sql.Open("mysql", dsn(""))
-	if err != nil {
-		log.Printf("Error %s when opening DB\n", err)
-		return
+	Articles = []Article{
+		{Id: "1", Title: "Hello", Desc: "Article Description", Content: "Article Content"},
+		{Id: "2", Title: "Hello 2", Desc: "Article Description", Content: "Article Content"},
 	}
-	defer db.Close()
-
-	ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancelfunc()
-	res, err := db.ExecContext(ctx, "CREATE DATABASE IF NOT EXISTS "+dbname)
-	if err != nil {
-		log.Printf("Error %s when creating DB\n", err)
-		return
-	}
-	no, err := res.RowsAffected()
-	if err != nil {
-		log.Printf("Error %s when fetching rows", err)
-		return
-	}
-	log.Printf("rows affected %d\n", no)
-
-	db.Close()
-	db, err = sql.Open("mysql", dsn(dbname))
-	if err != nil {
-		log.Printf("Error %s when opening DB", err)
-		return
-	}
-	defer db.Close()
-
-	db.SetMaxOpenConns(20)
-	db.SetMaxIdleConns(20)
-	db.SetConnMaxLifetime(time.Minute * 5)
-
-	ctx, cancelfunc = context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancelfunc()
-	err = db.PingContext(ctx)
-	if err != nil {
-		log.Printf("Errors %s pinging DB", err)
-		return
-	}
-	log.Printf("Connected to DB %s successfully\n", dbname)
+	handleRequests()
 }
